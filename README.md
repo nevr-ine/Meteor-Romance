@@ -17,7 +17,7 @@ A digital art piece built with **Three.js**, simulating a romantic cinematic jou
 - Post-processing (UnrealBloomPass)
 
 ## How to Run
-Simply open `index.html` in any modern web browser that supports WebGL. Using **Live Server** (VS Code extension) is highly recommended for the best experience.
+Simply open `meteor-romance-v16.html` in any modern web browser that supports WebGL. Using **Live Server** (VS Code extension) is highly recommended for the best experience.
 
 ---
 *Created with ❤️ by Antigravity*
