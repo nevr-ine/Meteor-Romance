@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinematic "Romance" Meteor - v16.1</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050a1f;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            pointer-events: none;
+            z-index: 100;
+            color: #7777cc;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 2px;
+            opacity: 0.8;
+            text-shadow: 0 0 10px rgba(100, 100, 255, 0.5);
+        }
+
+        .status-header {
+            font-weight: bold;
+            color: #ff00ff;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .line {
+            opacity: 0.6;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="overlay">
+        <div class="status-header">>>> ROMANCE_ENGINE.X</div>
+        <div class="line">Render: CENTER_TRACK_V16.1</div>
+        <div class="line">Grade: STARRY_VOYAGE_ATMOS</div>
+        <div class="line">Effect: MIDNIGHT_BLUE_GAZING</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+        // --- Post Processing: VHS Shader ---
+        const VHSShader = {
+            uniforms: {
+                "tDiffuse": { value: null },
+                "time": { value: 0.0 },
+                "resolution": { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float time;
+                uniform vec2 resolution;
+                varying vec2 vUv;
+
+                float rand(vec2 co) {
+                    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+                }
+
+                void main() {
+                    vec2 uv = vUv;
+                    
+                    // Simple Chromatic Aberration
+                    float r = texture2D(tDiffuse, uv + vec2(0.001, 0.0)).r;
+                    float g = texture2D(tDiffuse, uv).g;
+                    float b = texture2D(tDiffuse, uv - vec2(0.001, 0.0)).b;
+                    
+                    vec3 col = vec3(r, g, b);
+
+                    // Scanlines
+                    float s = sin(uv.y * resolution.y * 1.5);
+                    col *= (0.95 + 0.05 * s);
+
+                    // Noise/Grain
+                    float n = rand(uv + time * 0.1) * 0.08;
+                    col += n;
+
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            `
+        };
+
+        // --- v15.1 Space Tear Shader ---
+        const TearShader = {
+            uniforms: {
+                time: { value: 0 },
+                color: { value: new THREE.Color(0xffffff) },
+                fringeColor: { value: new THREE.Color(0xff00ff) }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                varying float vNoise;
+                uniform float time;
+                
+                // Simple 2D Noise
+                float rand(vec2 n) { 
+                    return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+                }
+                
+                void main() {
+                    vUv = uv;
+                    
+                    // SPACE TEARING JITTER
+                    float noise = rand(uv + time * 0.05) * 2.0 - 1.0;
+                    vNoise = noise;
+                    
+                    vec3 pos = position;
+                    // Apply jagged displacement to create "torn" effect
+                    if(abs(pos.y) > 0.05) { 
+                        // Trong vertexShader của TearShader
+                        pos.x += noise * 1.5 * sin(uv.x * 20.0 + time * 2.0); // Tăng biên độ rung ngang
+                        pos.y += noise * 1.0; // Tăng biên độ rung dọc
+                    }
+                    
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec2 vUv;
+                varying float vNoise;
+                uniform vec3 color;
+                uniform vec3 fringeColor;
+                uniform float time;
+                
+                void main() {
+                    // Tạo độ mờ ở hai đầu dải (tapering)
+                    float edgeOut = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
+                    
+                    // Hiệu ứng nhiễu màu (Chromatic Fringe)
+                    float fringe = pow(abs(vNoise), 2.0);
+                    vec3 finalCol = mix(color, fringeColor, fringe * 0.8);
+                    
+                    // Tạo các khoảng trống nhấp nháy (Flickering gaps) để tạo cảm giác "bị xé"
+                    float flicker = step(0.2, fract(vUv.x * 10.0 - time * 8.0 + vNoise * 0.5));
+                    
+                    // Độ sáng của tia (lõi sáng, viền mờ)
+                    float glow = pow(1.0 - abs(vUv.y - 0.5) * 2.0, 3.0);
+                    
+                    float alpha = glow * edgeOut * flicker;
+                    
+                    // Kết quả cuối cùng - đây là dòng quan trọng nhất bị thiếu
+                    gl_FragColor = vec4(finalCol, alpha);
+                }
+            `
+        };
+
+
+        // --- Core Scene ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050a1f, 0.0015);
+        const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 1, 1500);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setClearColor(0x050a1f, 1);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // CINEMATIC STARTING POSITION (Fixed v13.6)
+        camera.position.set(30, 15, 140);
+        camera.lookAt(0, 0, 0);
+
+        // --- Composer Matrix ---
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.4, 0.85);
+        composer.addPass(bloomPass);
+
+        const vhsPass = new ShaderPass(VHSShader);
+        composer.addPass(vhsPass);
+
+        // --- Dynamic Textures ---
+        const softTex = (() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.3, 'rgba(255,255,255,0.4)');
+            grad.addColorStop(0.7, 'rgba(255,255,255,0.05)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 128, 128);
+            return new THREE.CanvasTexture(canvas);
+        })();
+
+        // --- Global Logic ---
+        const TRAJ = Math.PI * 1.05;
+        const SPEED = 0.3; // CINEMATIC SLOW SPEED
+
+        // Age Pyramid State (v14.8: Organic Rules)
+        const PYRAMID_PRESETS = [
+            [1.4, 1.2, 1.0, 0.8, 0.6, 0.4],                 // TRIANGLE (Tapering)
+            [0.8, 0.9, 0.9, 1.0, 1.0, 0.9, 0.9, 0.8],       // STABLE (Uniform)
+            [0.5, 0.8, 1.2, 1.4, 1.2, 0.8, 0.5],             // DIAMOND (Bulbous)
+            [1.4, 0.9, 0.6, 0.4, 0.4, 0.6, 0.9, 1.4]        // HOURGLASS
+        ];
+        let currentPattern = PYRAMID_PRESETS[0];
+        let pyramidIdx = 0;
+
+        // Correct 3D Trajectory: Account for both Y tilt and Z trajectory
+        const trajDir = new THREE.Vector3(1, 0, 0);
+        trajDir.applyEuler(new THREE.Euler(0, Math.PI / 7, TRAJ));
+        const WORLD_VEL = trajDir.clone().multiplyScalar(-SPEED);
+
+        const meteorGroup = new THREE.Group();
+        scene.add(meteorGroup);
+
+        // 1. SPACE TEARING HEAD (v15.1: Ribbon-based rupture)
+        const tearGroup = new THREE.Group();
+        tearGroup.position.x = 20;
+        meteorGroup.add(tearGroup);
+
+        // Core reference (v15.3: Sharper singularity)
+        // --- THAY THẾ: Đầu thiên thạch lởm chởm & Lõi hạt ---
+        const meteorHeadGroup = new THREE.Group();
+        meteorHeadGroup.position.x = 20;
+        meteorGroup.add(meteorHeadGroup);
+
+        // 1. Tạo các mảnh vỡ lởm chởm xung quanh lõi
+        const headPiecesCount = 8;
+        for (let i = 0; i < headPiecesCount; i++) {
+            const radius = 0.08 + Math.random() * 0.15;
+            const geo = new THREE.IcosahedronGeometry(radius, 0); // Hình khối góc cạnh
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+
+            // Đặt vị trí lộn xộn để tạo hình dạng bất đối xứng
+            mesh.position.set(
+                (Math.random() - 0.5) * 0.25,
+                (Math.random() - 0.5) * 0.25,
+                (Math.random() - 0.5) * 0.25
+            );
+            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            meteorHeadGroup.add(mesh);
+        }
+
+        // 2. Tạo lõi hạt năng lượng rực rỡ (Core Glow)
+        const coreParticleCount = 30;
+        const coreGeo = new THREE.BufferGeometry();
+        const corePosBuf = new Float32Array(coreParticleCount * 3);
+        for (let i = 0; i < coreParticleCount; i++) {
+            corePosBuf[i * 3] = (Math.random() - 0.5) * 0.2;
+            corePosBuf[i * 3 + 1] = (Math.random() - 0.5) * 0.2;
+            corePosBuf[i * 3 + 2] = (Math.random() - 0.5) * 0.2;
+        }
+        coreGeo.setAttribute('position', new THREE.BufferAttribute(corePosBuf, 3));
+        const corePoints = new THREE.Points(coreGeo, new THREE.PointsMaterial({
+            size: 0.8,
+            map: softTex,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            color: 0xffffff
+        }));
+        meteorHeadGroup.add(corePoints);
+
+        const createTearRibbon = (radius, width, speedMult, rotOffset) => {
+            const geo = new THREE.PlaneGeometry(radius * 2, width, 128, 1);
+            const mat = new THREE.ShaderMaterial({
+                uniforms: THREE.UniformsUtils.clone(TearShader.uniforms),
+                vertexShader: TearShader.vertexShader,
+                fragmentShader: TearShader.fragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.y = rotOffset;
+            return mesh;
+        };
+
+        const ribbons = [
+            createTearRibbon(6, 0.4, 1.0, 0),
+            createTearRibbon(5, 0.3, 1.2, Math.PI / 4),
+            createTearRibbon(7, 0.5, 0.8, -Math.PI / 4),
+            createTearRibbon(8, 0.2, 1.5, Math.PI / 2)
+        ];
+        ribbons.forEach(r => tearGroup.add(r));
+
+        const laser = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.05, 2040, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        laser.rotation.z = Math.PI / 2;
+        laser.position.x = -1000;
+        meteorGroup.add(laser);
+
+        meteorGroup.rotation.z = TRAJ;
+        meteorGroup.rotation.y = Math.PI / 7;
+
+        // --- Texture Helper: HEART SHAPE ---
+        const heartTex = (() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            const x = 64, y = 64, w = 100, h = 100;
+            ctx.moveTo(x, y + h / 4);
+            ctx.bezierCurveTo(x, y, x - w / 2, y, x - w / 2, y + h / 4);
+            ctx.bezierCurveTo(x - w / 2, y + (2 * h) / 3, x, y + h, x, y + h);
+            ctx.bezierCurveTo(x, y + h, x + w / 2, y + (2 * h) / 3, x + w / 2, y + h / 4);
+            ctx.bezierCurveTo(x + w / 2, y, x, y, x, y + h / 4);
+            ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        })();
+
+        // --- Pixel Ring Engine ---
+        class PixelRing {
+            constructor(isSurprise = false, forcedRadius = null) {
+                this.age = 0;
+                this.maxAge = 400; // Slightly shorter life for density
+                this.isSurprise = isSurprise;
+
+                // HOLLOW CHEESE RADIUS: Pyramid logic or random variety
+                if (forcedRadius !== null) {
+                    this.baseRadius = forcedRadius;
+                } else {
+                    this.baseRadius = 6.0 + Math.random() * 8.0;
+                    if (isSurprise) this.baseRadius *= 1.25; // Giảm từ 2.5 xuống 1.25
+                }
+
+                this.mesh = this.createPixelMesh();
+
+                // Target Scale Physics (v14.6: Fixed size pattern)
+                this.targetScale = isSurprise ? 0.4 : 1.6;
+                if (forcedRadius !== null) {
+                    // Adjust scale multiplier based on pyramid step
+                    this.targetScale *= (forcedRadius / 10.0);
+                }
+                this.mesh.scale.setScalar(0.1);
+
+                // BEAM-CENTERED ALIGNMENT
+                this.mesh.position.set(20, 0, 0);
+                this.mesh.rotation.y = Math.PI / 2;
+
+                meteorGroup.add(this.mesh);
+            }
+
+            createPixelMesh() {
+                const isSurprise = this.isSurprise;
+                const count = isSurprise ? 1000 : 1500;
+                const geo = new THREE.BufferGeometry();
+                const posBuf = new Float32Array(count * 3);
+                const colBuf = new Float32Array(count * 3);
+
+                const thickness = isSurprise ? 0.2 : 0.1;
+                const depth = isSurprise ? 0.5 : 1 + Math.random() * 0.2;
+
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const r = this.baseRadius + (Math.random() - 0.5) * thickness;
+
+                    posBuf[i * 3] = Math.cos(angle) * r;
+                    posBuf[i * 3 + 1] = Math.sin(angle) * r;
+                    posBuf[i * 3 + 2] = (Math.random() - 0.5) * depth;
+
+                    if (isSurprise) {
+                        const type = Math.random();
+                        if (type > 0.7) { // Trắng hồng
+                            colBuf[i * 3] = 1; colBuf[i * 3 + 1] = 0.9; colBuf[i * 3 + 2] = 0.95;
+                        } else if (type > 0.3) { // Hồng
+                            colBuf[i * 3] = 1; colBuf[i * 3 + 1] = 0.2; colBuf[i * 3 + 2] = 0.5;
+                        } else { // Đỏ
+                            colBuf[i * 3] = 0.9; colBuf[i * 3 + 1] = 0.05; colBuf[i * 3 + 2] = 0.1;
+                        }
+                    }
+                }
+                geo.setAttribute('position', new THREE.BufferAttribute(posBuf, 3));
+                if (isSurprise) geo.setAttribute('color', new THREE.BufferAttribute(colBuf, 3));
+
+                const mat = new THREE.PointsMaterial({
+                    size: isSurprise ? 1.2 : 2.2,
+                    sizeAttenuation: !isSurprise ? false : true,
+                    vertexColors: isSurprise ? true : false,
+                    transparent: true,
+                    blending: isSurprise ? THREE.NormalBlending : THREE.NormalBlending, // Đồng bộ Normal để sắc nét
+                    depthWrite: false,
+                    opacity: 0,
+                    map: isSurprise ? heartTex : null
+                });
+                return new THREE.Points(geo, mat);
+            }
+
+            update() {
+                this.age++;
+                this.mesh.position.x -= SPEED;
+
+                const p = this.age / this.maxAge;
+
+                if (this.isSurprise) {
+                    // Hiệu ứng "Bùng nổ" (Burst Expansion)
+                    let burstScale = 1.0;
+                    if (this.age < 40) {
+                        const burstP = this.age / 40;
+                        // Sử dụng hàm Power Out để nở cực nhanh lúc đầu
+                        const easedBurst = 1 - Math.pow(1 - burstP, 4);
+                        burstScale = 0.05 + easedBurst * 0.95;
+                    }
+
+                    const beat = 1 + Math.pow(Math.sin(p * Math.PI * 2), 2) * 0.1;
+                    this.mesh.scale.setScalar(burstScale * beat * (1 + p * 0.4));
+                } else {
+                    // Rapid Grow-In then Hold cho Normal Ring
+                    if (this.age < 70) {
+                        const growP = this.age / 70;
+                        const easedP = 1 - Math.pow(1 - growP, 3);
+                        this.mesh.scale.setScalar(0.1 + (this.targetScale - 0.1) * easedP);
+                    } else {
+                        this.mesh.scale.setScalar(this.targetScale);
+                    }
+                }
+
+                // Color Spectrum & Birth Flash (v15.9: Intro + Infinite Loop)
+                if (!this.isSurprise) {
+                    const dist = Math.abs(this.mesh.position.x);
+                    const unit = 40; // Length of one color cycle
+                    let colors, t;
+
+                    if (dist < unit) {
+                        // Phase 1: Intro (Purple -> Red -> Cyan -> Green -> Yellow)
+                        t = dist / unit;
+                        colors = [
+                            new THREE.Color(0x7700ff), // Tím
+                            new THREE.Color(0xff0000), // Đỏ
+                            new THREE.Color(0x00ffff), // Cyan
+                            new THREE.Color(0x00ff00), // Xanh lá
+                            new THREE.Color(0xffff00)  // Vàng
+                        ];
+                    } else {
+                        // Phase 2: Infinite Loop (Red -> Cyan -> Green -> Yellow)
+                        t = ((dist - unit) % unit) / unit;
+                        colors = [
+                            new THREE.Color(0xff0000), // Đỏ
+                            new THREE.Color(0x00ffff), // Cyan
+                            new THREE.Color(0x00ff00), // Xanh lá
+                            new THREE.Color(0xffff00), // Vàng
+                            new THREE.Color(0xff0000)  // Wrap back to Red
+                        ];
+                    }
+
+                    const step = 1.0 / (colors.length - 1);
+                    const idx = Math.min(Math.floor(t / step), colors.length - 2);
+                    const blend = (t % step) / step;
+
+                    const spectrumColor = new THREE.Color().lerpColors(colors[idx], colors[idx + 1], blend);
+
+                    // v15.6 BIRTH FLASH (Color only)
+                    const birthFactor = Math.max(0, 1 - (this.age / 30));
+                    this.mesh.material.color.lerpColors(spectrumColor, new THREE.Color(0xffffff), birthFactor);
+
+                    this.mesh.material.opacity = Math.sin(p * Math.PI) * 0.85;
+                } else {
+                    // Cập nhật Opacity sắc nét cho Heart Ring
+                    const opacity = Math.sin(p * Math.PI) * 1.5;
+                    this.mesh.material.opacity = Math.min(1.0, opacity);
+                }
+
+                if (this.age >= this.maxAge || this.mesh.position.x < -1200) {
+                    meteorGroup.remove(this.mesh);
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        // --- Background Atmosphere ---
+        const starCount = 8000; // Tăng số lượng sao
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = new Float32Array(starCount * 3);
+        const starCol = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            // Phân bổ sao trong không gian rộng hơn xung quanh camera
+            starPos[i * 3] = (Math.random() - 0.5) * 4000;
+            starPos[i * 3 + 1] = (Math.random() - 0.5) * 3000;
+            starPos[i * 3 + 2] = (Math.random() - 0.5) * 2000;
+
+            const r = Math.random();
+            const b = 0.6 + Math.random() * 0.4; // Tăng độ sáng cơ bản
+            if (r > 0.8) {
+                // Slightly Yellowish
+                starCol[i * 3] = b; starCol[i * 3 + 1] = b * 0.95; starCol[i * 3 + 2] = b * 0.8;
+            } else if (r > 0.6) {
+                // Slightly Bluish
+                starCol[i * 3] = b * 0.8; starCol[i * 3 + 1] = b * 0.9; starCol[i * 3 + 2] = b;
+            } else {
+                // White
+                starCol[i * 3] = b; starCol[i * 3 + 1] = b; starCol[i * 3 + 2] = b;
+            }
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
+        const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+            size: 1.8,  // Tăng kích thước từ 0.4 lên 1.8
+            vertexColors: true,
+            fog: false, // Tắt fog để sao không bị mờ vào nền
+            transparent: true,
+            opacity: 0.8
+        }));
+        scene.add(stars);
+
+        // --- Loop ---
+        const rings = [];
+        let ringTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
+
+            // Update Post FX
+            vhsPass.uniforms.time.value = time;
+
+            // Parallax Stars & Meteor Motion (v13.6)
+            // Di chuyển sao chậm hơn meteor để tạo hiệu ứng chiều sâu
+            stars.position.add(WORLD_VEL.clone().multiplyScalar(0.5));
+            meteorGroup.position.add(WORLD_VEL);
+
+            // Cải thiện logic wrapping cho Stars - Để chúng luôn bao quanh camera
+            const starLimit = 2000;
+            const camPos = camera.position;
+            if (stars.position.x - camPos.x > starLimit) stars.position.x -= starLimit * 2;
+            if (stars.position.x - camPos.x < -starLimit) stars.position.x += starLimit * 2;
+            if (stars.position.y - camPos.y > starLimit) stars.position.y -= starLimit * 3;
+            if (stars.position.y - camPos.y < -starLimit) stars.position.y += starLimit * 2;
+            if (stars.position.z - camPos.z > 1000) stars.position.z -= 2000;
+            if (stars.position.z - camPos.z < -1000) stars.position.z += 2000;
+
+            // 1. ANIMATE SPACE TEAR RIBBONS (v15.3: Violent rotation)
+            ribbons.forEach((rib, i) => {
+                rib.material.uniforms.time.value = time * (1.5 + i * 0.2);
+                rib.rotation.x += 0.04 * (i + 1); // Quadruple speed
+            });
+
+            // --- THAY THẾ: Hiệu ứng rung và xoay cho đầu mới ---
+            meteorHeadGroup.position.set(
+                20 + (Math.random() - 0.5) * 0.15,
+                (Math.random() - 0.5) * 0.15,
+                (Math.random() - 0.5) * 0.15
+            );
+            meteorHeadGroup.rotation.x += 0.05; // Xoay nhanh tạo cảm giác hỗn loạn
+            meteorHeadGroup.rotation.y += 0.05;
+
+            // Ring Life - IMMEDIATE BACK-TO-BACK SPAWN
+            ringTime += SPEED;
+            if (ringTime >= 1.2) { // Immediate stack
+                const surprise = Math.random() < 0.05;
+                let radius = null;
+
+                if (!surprise) {
+                    // APPLY RANDOM AGE PYRAMID PRESET (v14.8: Organic Rules)
+                    const multiplier = currentPattern[pyramidIdx];
+
+                    // 1. Global Breathing (v14.8) - subtle oscillation over time
+                    const breathing = 1.0 + Math.sin(Date.now() * 0.0005) * 0.1;
+
+                    // 2. Rhythmic Jitter (v14.8) - breaks perfect uniformity
+                    const jitter = 1.0 + (Math.random() - 0.5) * 0.2;
+
+                    radius = 6.5 * multiplier * breathing * jitter;
+
+                    pyramidIdx++;
+                    if (pyramidIdx >= currentPattern.length) {
+                        pyramidIdx = 0;
+                        currentPattern = PYRAMID_PRESETS[Math.floor(Math.random() * PYRAMID_PRESETS.length)];
+                    }
+                }
+
+                rings.push(new PixelRing(surprise, radius));
+                ringTime = 0;
+            }
+
+            for (let i = rings.length - 1; i >= 0; i--) {
+                if (!rings[i].update()) rings.splice(i, 1);
+            }
+
+            // CENTERED TRACKING (v15.4: Ultra Macro)
+            const camOffset = new THREE.Vector3(70, 4, 35); // Even closer for precision
+            camera.position.copy(meteorGroup.position).add(camOffset);
+            camera.lookAt(meteorGroup.position.x, meteorGroup.position.y, meteorGroup.position.z);
+
+            composer.render();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+            vhsPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+
+</html>
