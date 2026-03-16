@@ -2,7 +2,7 @@
 
 Một tác phẩm nghệ thuật kỹ thuật số được xây dựng bằng **Three.js**, mô phỏng một chuyến hành trình xuyên không gian đầy lãng mạn với những ngôi sao rực rỡ và hiệu ứng **Heart Ring** (Vòng nhẫn Trái tim) độc đáo.
 
-![Meteor Romance Preview](file:///C:/Users/nhatm/.gemini/antigravity/brain/daad640d-e749-49b3-82fb-7e45e00f6402/meteor_romance_preview_1773642428077.webp)
+![Meteor Romance Preview](./meteor_preview.webp)
 
 ## Tính năng nổi bật
 - **Cinematic Experience**: Hiệu ứng góc nhìn điện ảnh bám đuổi theo thiên thạch.
