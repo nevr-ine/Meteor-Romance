@@ -1,23 +1,23 @@
 # Meteor Romance - v16.1
 
-Một tác phẩm nghệ thuật kỹ thuật số được xây dựng bằng **Three.js**, mô phỏng một chuyến hành trình xuyên không gian đầy lãng mạn với những ngôi sao rực rỡ và hiệu ứng **Heart Ring** (Vòng nhẫn Trái tim) độc đáo.
+A digital art piece built with **Three.js**, simulating a romantic cinematic journey through space featuring brilliant starfields and a unique **Heart Ring** effect.
 
 ![Meteor Romance Preview](./meteor_preview.webp)
 
-## Tính năng nổi bật
-- **Cinematic Experience**: Hiệu ứng góc nhìn điện ảnh bám đuổi theo thiên thạch.
-- **Heart Ring Engine**: Mỗi 5% xác suất, thiên thạch sẽ tạo ra một vòng nhẫn cấu tạo từ hàng ngàn trái tim nhỏ lấp lánh với hiệu ứng nhịp đập.
-- **Starry Voyage Atmosphere**: Hệ thống sao nền rực rỡ với hiệu ứng parallax tạo chiều sâu không gian.
-- **VHS Aesthetic**: Hiệu ứng hậu kỳ mang phong cách retro, hoài niệm.
+## Key Features
+- **Cinematic Experience**: A dynamic camera system that follows the meteor with cinematic offsets.
+- **Heart Ring Engine**: A rare "Surprise" effect (5% chance) that spawns rings composed of thousands of glowing heart-shaped particles with a rhythmic heartbeat animation.
+- **Starry Voyage Atmosphere**: A dense, vibrant starfield with parallax effects providing deep spatial immersion.
+- **VHS Aesthetic**: Retro-style post-processing for a nostalgic, lo-fi look.
 
-## Công nghệ sử dụng
+## Technologies Used
 - [Three.js](https://threejs.org/)
 - WebGL
-- Custom Shaders (VHS, Space Tear)
+- Custom Shaders (VHS glitch, Space Tear)
 - Post-processing (UnrealBloomPass)
 
-## Cách chạy
-Chỉ cần mở file `index.html` bằng bất kỳ trình duyệt hiện đại nào hỗ trợ WebGL. Khuyến khích sử dụng **Live Server** để có trải nghiệm tốt nhất.
+## How to Run
+Simply open `index.html` in any modern web browser that supports WebGL. Using **Live Server** (VS Code extension) is highly recommended for the best experience.
 
 ---
 *Created with ❤️ by Antigravity*
